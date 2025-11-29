@@ -106,8 +106,9 @@ const Gallery = () => {
     }
   };
 
-  const workshopImages = images.filter(img => img.category === "Workshop");
-  const spotlightImages = images.filter(img => img.category === "Spotlight");
+  // Updated filter logic to support both new and legacy category names
+  const workshopImages = images.filter(img => img.category === "One Week International Workshop" || img.category === "Workshop");
+  const spotlightImages = images.filter(img => img.category === "Startup Spotlight" || img.category === "Spotlight");
   const chaupalImages = images.filter(img => img.category === "E-Chaupal");
   const othersImages = images.filter(img => img.category === "Others");
 

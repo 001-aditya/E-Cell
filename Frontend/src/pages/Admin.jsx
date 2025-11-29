@@ -38,6 +38,24 @@ const emptyEvent = {
   registration_deadline: ""
 };
 
+const uploadImage = async (file, folder) => {
+  if (!file) return null;
+  const fileExt = file.name.split(".").pop();
+  const fileName = `${Math.random()}.${fileExt}`;
+  const filePath = `${folder}/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("images")
+    .upload(filePath, file);
+
+  if (uploadError) {
+    throw uploadError;
+  }
+
+  const { data } = supabase.storage.from("images").getPublicUrl(filePath);
+  return data.publicUrl;
+};
+
 const Admin = () => {
   const { profile } = useAuth();
   const [activeTab, setActiveTab] = useState("blogs");
@@ -48,12 +66,15 @@ const Admin = () => {
   const [loading, setLoading] = useState(false);
 
   const [blogForm, setBlogForm] = useState(emptyBlog);
+  const [blogImageFile, setBlogImageFile] = useState(null);
   const [editingBlogId, setEditingBlogId] = useState(null);
 
   const [memberForm, setMemberForm] = useState(emptyMember);
+  const [memberImageFile, setMemberImageFile] = useState(null);
   const [editingMemberId, setEditingMemberId] = useState(null);
 
   const [eventForm, setEventForm] = useState(emptyEvent);
+  const [eventImageFile, setEventImageFile] = useState(null);
   const [editingEventId, setEditingEventId] = useState(null);
 
   const [galleryForm, setGalleryForm] = useState({
@@ -61,6 +82,7 @@ const Admin = () => {
     category: "One Week International Workshop",
     image_url: ""
   });
+  const [galleryImageFile, setGalleryImageFile] = useState(null);
 
   useEffect(() => {
     loadBlogs();
@@ -114,25 +136,40 @@ const Admin = () => {
     e.preventDefault();
     setLoading(true);
     try {
+      let imageUrl = blogForm.cover_image;
+      if (blogImageFile) {
+        imageUrl = await uploadImage(blogImageFile, "blogs");
+      }
+
       const payload = {
         ...blogForm,
+        cover_image: imageUrl,
         slug: blogForm.slug || slugify(blogForm.title),
         published_at: new Date().toISOString(),
         author_id: profile?.id
       };
+
+      console.log("Submitting Blog:", payload);
 
       if (editingBlogId) {
         const { error } = await supabase
           .from("blogs")
           .update(payload)
           .eq("id", editingBlogId);
-        if (error) throw error;
+        if (error) {
+          console.error("Blog Update Error:", error);
+          throw error;
+        }
       } else {
         const { error } = await supabase.from("blogs").insert([payload]);
-        if (error) throw error;
+        if (error) {
+          console.error("Blog Insert Error:", error);
+          throw error;
+        }
       }
 
       setBlogForm(emptyBlog);
+      setBlogImageFile(null);
       setEditingBlogId(null);
       await loadBlogs();
     } catch (error) {
@@ -152,6 +189,7 @@ const Admin = () => {
       cover_image: blog.cover_image ?? "",
       tags: blog.tags ?? ""
     });
+    setBlogImageFile(null);
   };
 
   const handleBlogDelete = async (id) => {
@@ -167,17 +205,28 @@ const Admin = () => {
     e.preventDefault();
     setLoading(true);
     try {
+      let photoUrl = memberForm.photo_url;
+      if (memberImageFile) {
+        photoUrl = await uploadImage(memberImageFile, "team");
+      }
+
       const payload = {
         ...memberForm,
-        priority: memberForm.priority ? Number(memberForm.priority) : 999
+        photo_url: photoUrl,
+        priority: memberForm.priority && !isNaN(memberForm.priority) ? parseInt(memberForm.priority) : 999
       };
+
+      console.log("Submitting Member:", { editingMemberId, payload });
 
       if (editingMemberId) {
         const { error } = await supabase
           .from("team_members")
           .update(payload)
           .eq("id", editingMemberId);
-        if (error) throw error;
+        if (error) {
+          console.error("Update Error:", error);
+          throw error;
+        }
       } else {
         const { error } = await supabase
           .from("team_members")
@@ -186,6 +235,7 @@ const Admin = () => {
       }
 
       setMemberForm(emptyMember);
+      setMemberImageFile(null);
       setEditingMemberId(null);
       await loadTeam();
     } catch (error) {
@@ -205,6 +255,7 @@ const Admin = () => {
       photo_url: member.photo_url ?? "",
       priority: member.priority ?? ""
     });
+    setMemberImageFile(null);
   };
 
   const handleMemberDelete = async (id) => {
@@ -223,18 +274,29 @@ const Admin = () => {
     e.preventDefault();
     setLoading(true);
     try {
+      let imageUrl = eventForm.cover_image;
+      if (eventImageFile) {
+        imageUrl = await uploadImage(eventImageFile, "events");
+      }
+
+      const payload = {
+        ...eventForm,
+        cover_image: imageUrl
+      };
+
       if (editingEventId) {
         const { error } = await supabase
           .from("events")
-          .update(eventForm)
+          .update(payload)
           .eq("id", editingEventId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("events").insert([eventForm]);
+        const { error } = await supabase.from("events").insert([payload]);
         if (error) throw error;
       }
 
       setEventForm(emptyEvent);
+      setEventImageFile(null);
       setEditingEventId(null);
       await loadEvents();
     } catch (error) {
@@ -255,6 +317,7 @@ const Admin = () => {
       cover_image: event.cover_image ?? "",
       registration_deadline: event.registration_deadline ?? ""
     });
+    setEventImageFile(null);
   };
 
   const handleEventDelete = async (id) => {
@@ -270,12 +333,24 @@ const Admin = () => {
     e.preventDefault();
     setLoading(true);
     try {
+      let imageUrl = galleryForm.image_url;
+      if (galleryImageFile) {
+        imageUrl = await uploadImage(galleryImageFile, "gallery");
+      }
+
+      const payload = { ...galleryForm, image_url: imageUrl };
+      console.log("Submitting Gallery Image:", payload);
+
       const { error } = await supabase
         .from("gallery_images")
-        .insert([galleryForm]);
-      if (error) throw error;
+        .insert([payload]);
+      if (error) {
+        console.error("Gallery Insert Error:", error);
+        throw error;
+      }
 
       setGalleryForm({ title: "", category: "One Week International Workshop", image_url: "" });
+      setGalleryImageFile(null);
       await loadGallery();
     } catch (error) {
       alert(`Gallery save failed: ${error.message}`);
@@ -373,14 +448,20 @@ const Admin = () => {
                 }
                 required
               />
-              <input
-                className="input"
-                placeholder="Cover Image URL"
-                value={blogForm.cover_image}
-                onChange={(e) =>
-                  setBlogForm({ ...blogForm, cover_image: e.target.value })
-                }
-              />
+              <div className="space-y-2">
+                <label className="text-sm text-white/60 ml-1">Cover Image</label>
+                <div className="flex gap-4 items-center">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="input flex-1"
+                    onChange={(e) => setBlogImageFile(e.target.files[0])}
+                  />
+                  {blogForm.cover_image && !blogImageFile && (
+                    <img src={blogForm.cover_image} alt="Current" className="h-10 w-10 rounded object-cover" />
+                  )}
+                </div>
+              </div>
               <button
                 className="bg-yellow-400 hover:bg-yellow-300 text-black font-bold py-3 px-8 rounded-xl transition-all duration-300 transform hover:scale-105"
                 disabled={loading}
@@ -393,6 +474,7 @@ const Admin = () => {
                   onClick={() => {
                     setEditingBlogId(null);
                     setBlogForm(emptyBlog);
+                    setBlogImageFile(null);
                   }}
                   className="ml-4 text-white/70 hover:text-white"
                 >
@@ -497,14 +579,20 @@ const Admin = () => {
                 />
               </div>
               <div className="grid md:grid-cols-2 gap-4">
-                <input
-                  className="input"
-                  placeholder="Photo URL"
-                  value={memberForm.photo_url}
-                  onChange={(e) =>
-                    setMemberForm({ ...memberForm, photo_url: e.target.value })
-                  }
-                />
+                <div className="space-y-2">
+                  <label className="text-sm text-white/60 ml-1">Photo</label>
+                  <div className="flex gap-4 items-center">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="input flex-1"
+                      onChange={(e) => setMemberImageFile(e.target.files[0])}
+                    />
+                    {memberForm.photo_url && !memberImageFile && (
+                      <img src={memberForm.photo_url} alt="Current" className="h-10 w-10 rounded-full object-cover" />
+                    )}
+                  </div>
+                </div>
                 <input
                   className="input"
                   placeholder="Priority (1-999)"
@@ -527,6 +615,7 @@ const Admin = () => {
                   onClick={() => {
                     setEditingMemberId(null);
                     setMemberForm(emptyMember);
+                    setMemberImageFile(null);
                   }}
                   className="ml-4 text-white/70 hover:text-white"
                 >
@@ -617,14 +706,20 @@ const Admin = () => {
                     setEventForm({ ...eventForm, location: e.target.value })
                   }
                 />
-                <input
-                  className="input"
-                  placeholder="Cover Image URL"
-                  value={eventForm.cover_image}
-                  onChange={(e) =>
-                    setEventForm({ ...eventForm, cover_image: e.target.value })
-                  }
-                />
+                <div className="space-y-2">
+                  <label className="text-sm text-white/60 ml-1">Cover Image</label>
+                  <div className="flex gap-4 items-center">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="input flex-1"
+                      onChange={(e) => setEventImageFile(e.target.files[0])}
+                    />
+                    {eventForm.cover_image && !eventImageFile && (
+                      <img src={eventForm.cover_image} alt="Current" className="h-10 w-10 rounded object-cover" />
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
@@ -662,6 +757,7 @@ const Admin = () => {
                   onClick={() => {
                     setEditingEventId(null);
                     setEventForm(emptyEvent);
+                    setEventImageFile(null);
                   }}
                   className="ml-4 text-white/70 hover:text-white"
                 >
@@ -738,15 +834,18 @@ const Admin = () => {
                   <option value="Others" className="text-white bg-gray-900">Others</option>
                 </select>
               </div>
-              <input
-                className="input"
-                placeholder="Image URL"
-                value={galleryForm.image_url}
-                onChange={(e) =>
-                  setGalleryForm({ ...galleryForm, image_url: e.target.value })
-                }
-                required
-              />
+              <div className="space-y-2">
+                <label className="text-sm text-white/60 ml-1">Image</label>
+                <div className="flex gap-4 items-center">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="input flex-1"
+                    onChange={(e) => setGalleryImageFile(e.target.files[0])}
+                    required={!galleryForm.image_url}
+                  />
+                </div>
+              </div>
               <button
                 className="bg-yellow-400 hover:bg-yellow-300 text-black font-bold py-3 px-8 rounded-xl transition-all duration-300 transform hover:scale-105"
                 disabled={loading}
